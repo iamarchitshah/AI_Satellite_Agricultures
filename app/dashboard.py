@@ -9,17 +9,16 @@ from tensorflow.keras.models import load_model
 import folium
 from streamlit_folium import st_folium
 import json
+import streamlit as st
 import ee
-from datetime import datetime
 
-# ✅ Initialize Earth Engine using service account from secrets
+# ✅ Authenticate Earth Engine using service account
 service_account_info = json.loads(st.secrets["GEE_SERVICE_JSON"])
 credentials = ee.ServiceAccountCredentials(
     service_account_info["client_email"],
     key_data=service_account_info
 )
 ee.Initialize(credentials)
-
 
 
 # 🔄 Load models once
