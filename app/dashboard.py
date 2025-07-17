@@ -13,7 +13,11 @@ from streamlit_folium import st_folium
 from datetime import datetime
 
 # 🔁 Initialize Earth Engine
-ee.Initialize()
+import json
+from streamlit.runtime.secrets import secrets
+service_account_info = json.loads(secrets["GEE_SERVICE_JSON"])
+credentials = ee.ServiceAccountCredentials(service_account_info["client_email"], key_data=service_account_info)
+ee.Initialize(credentials)
 
 # 🔄 Load models once
 @st.cache_resource
