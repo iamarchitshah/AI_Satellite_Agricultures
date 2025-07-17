@@ -13,13 +13,12 @@ import streamlit as st
 import ee
 
 # ✅ Authenticate Earth Engine using service account
-service_account_info = json.loads(st.secrets["GEE_SERVICE_JSON"])
+service_account_info = st.secrets["GEE_SERVICE_JSON"]
 credentials = ee.ServiceAccountCredentials(
     service_account_info["client_email"],
     key_data=service_account_info
 )
 ee.Initialize(credentials)
-
 
 # 🔄 Load models once
 @st.cache_resource
