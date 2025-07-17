@@ -1,8 +1,8 @@
-streamlit
+streamlit>=1.30
 streamlit-folium
 folium
 earthengine-api
-tensorflow
+tensorflow==2.12.0
 scikit-learn
 pandas
 numpy
