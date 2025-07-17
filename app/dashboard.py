@@ -6,18 +6,21 @@ import rasterio
 from patchify import patchify
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import load_model
-
-import ee
 import folium
 from streamlit_folium import st_folium
+import json
+import ee
 from datetime import datetime
 
-# 🔁 Initialize Earth Engine
-import json
-from streamlit.runtime.secrets import secrets
-service_account_info = json.loads(secrets["GEE_SERVICE_JSON"])
-credentials = ee.ServiceAccountCredentials(service_account_info["client_email"], key_data=service_account_info)
+# ✅ Initialize Earth Engine using service account from secrets
+service_account_info = json.loads(st.secrets["GEE_SERVICE_JSON"])
+credentials = ee.ServiceAccountCredentials(
+    service_account_info["client_email"],
+    key_data=service_account_info
+)
 ee.Initialize(credentials)
+
+
 
 # 🔄 Load models once
 @st.cache_resource
