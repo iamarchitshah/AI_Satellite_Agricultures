@@ -1,9 +1,17 @@
 import streamlit as st
+import streamlit as st
 import json
 import ee
 import folium
 from streamlit_folium import st_folium
 from folium import Map, Marker
+# Load JSON from string
+service_account_info = json.loads(st.secrets["GEE_SERVICE_JSON"])
+
+# Authenticate with Earth Engine
+credentials = ee.ServiceAccountCredentials(email=service_account_info['client_email'], key_data=service_account_info)
+ee.Initialize(credentials)
+
 
 # -------------------- Setup Page --------------------
 st.set_page_config(page_title="Satellite Agriculture NDVI", layout="wide")
