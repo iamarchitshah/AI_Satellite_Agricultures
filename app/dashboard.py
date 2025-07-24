@@ -3,58 +3,57 @@ import ee
 import json
 import geemap.foliumap as geemap
 
-st.set_page_config(layout="wide", page_title="GEE Dashboard")
+st.set_page_config(page_title="AI Satellite Agriculture", layout="wide")
 
-# Load service account info from Streamlit secrets
-service_account_info = json.loads(st.secrets["GEE_SERVICE_JSON"])
+# Title
+st.title("🌾 AI Satellite Agriculture Dashboard")
 
-# Authenticate Earth Engine
+# Load service account JSON from Streamlit secrets (already parsed as dict)
+service_account_info = st.secrets["GEE_SERVICE_JSON"]
+
+# Convert dict to JSON string (as required by ee.ServiceAccountCredentials)
+key_data_json = json.dumps(service_account_info)
+
+# Authenticate with Earth Engine
 credentials = ee.ServiceAccountCredentials(
     email=service_account_info["client_email"],
-    key_data=service_account_info
+    key_data=key_data_json
 )
 ee.Initialize(credentials)
 
-st.title("🌍 Earth Engine Satellite Dashboard")
+# Sidebar instructions
+st.sidebar.header("🔧 Controls")
+st.sidebar.write("Select parameters and visualize satellite data.")
 
-# Select region and dates
-with st.sidebar:
-    st.header("Controls")
-    lat = st.number_input("Latitude", value=21.15)
-    lon = st.number_input("Longitude", value=72.78)
-    start_date = st.date_input("Start Date", value=ee.Date('2023-01-01').format('YYYY-MM-dd').getInfo())
-    end_date = st.date_input("End Date", value=ee.Date('2023-12-31').format('YYYY-MM-dd').getInfo())
+# Main app
+st.subheader("🛰️ NDVI Visualization from Sentinel-2")
 
-    show_ndvi = st.checkbox("Show NDVI", value=True)
+# Region selector
+region = st.text_input("Enter a region name or coordinates (e.g. 'India', '10,76')", "India")
 
-# Create Earth Engine geometry
-point = ee.Geometry.Point([lon, lat])
-region = point.buffer(10000).bounds()  # 10km buffer
+# Date range
+start_date = st.date_input("Start Date", value=ee.Date("2023-01-01").format().getInfo())
+end_date = st.date_input("End Date", value=ee.Date("2023-12-31").format().getInfo())
 
-# Load Sentinel-2 imagery
-s2 = ee.ImageCollection('COPERNICUS/S2_SR') \
-    .filterDate(str(start_date), str(end_date)) \
-    .filterBounds(region) \
-    .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20)) \
-    .median()
+# Fetch Sentinel-2 imagery
+try:
+    collection = (ee.ImageCollection("COPERNICUS/S2_SR")
+                  .filterDate(str(start_date), str(end_date))
+                  .filterBounds(ee.Geometry.Point([76, 10]))
+                  .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 10))
+                  .median()
+                  .clipToCollection(ee.FeatureCollection("USDOS/LSIB_SIMPLE/2017").filter(ee.Filter.eq('country_na', region))))
 
-# Calculate NDVI
-ndvi = s2.normalizedDifference(['B8', 'B4']).rename('NDVI')
+    # Calculate NDVI
+    ndvi = collection.normalizedDifference(['B8', 'B4']).rename('NDVI')
 
-# Create map
-Map = geemap.Map(center=[lat, lon], zoom=10)
+    # Display map
+    m = geemap.Map(center=[10, 76], zoom=5)
+    ndvi_params = {'min': 0, 'max': 1, 'palette': ['blue', 'white', 'green']}
+    m.addLayer(ndvi, ndvi_params, 'NDVI')
+    m.addLayerControl()
+    m.to_streamlit(height=600)
 
-if show_ndvi:
-    ndvi_params = {'min': 0.0, 'max': 1.0, 'palette': ['white', 'green']}
-    Map.addLayer(ndvi, ndvi_params, 'NDVI')
-    st.success("NDVI layer added to the map.")
-else:
-    vis_params = {'bands': ['B4', 'B3', 'B2'], 'min': 0, 'max': 3000}
-    Map.addLayer(s2, vis_params, 'Sentinel-2 RGB')
-    st.success("RGB image layer added to the map.")
-
-# Display map
-Map.to_streamlit(width=1200, height=600)
-
-st.markdown("✅ Data source: Sentinel-2 Surface Reflectance")
-
+except Exception as e:
+    st.error("⚠️ Error loading Earth Engine data:")
+    st.code(str(e))
