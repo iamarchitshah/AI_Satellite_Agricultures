@@ -1,80 +1,60 @@
 import streamlit as st
-import streamlit as st
-import json
 import ee
-import folium
-from streamlit_folium import st_folium
-from folium import Map, Marker
-# Load JSON from string
+import json
+import geemap.foliumap as geemap
+
+st.set_page_config(layout="wide", page_title="GEE Dashboard")
+
+# Load service account info from Streamlit secrets
 service_account_info = json.loads(st.secrets["GEE_SERVICE_JSON"])
 
-# Authenticate with Earth Engine
-credentials = ee.ServiceAccountCredentials(email=service_account_info['client_email'], key_data=service_account_info)
-ee.Initialize(credentials)
-
-
-# -------------------- Setup Page --------------------
-st.set_page_config(page_title="Satellite Agriculture NDVI", layout="wide")
-st.title("🌾 Satellite-Based Agriculture Analysis")
-st.markdown("Click on the map to select a location and view NDVI values from satellite data.")
-
-# -------------------- Authenticate with Earth Engine --------------------
-service_json = st.secrets["GEE_SERVICE_JSON"]
-
-# Convert secret string to dictionary
-if isinstance(service_json, str):
-    service_account_info = json.loads(service_json)
-else:
-    service_account_info = service_json
-
-# Initialize Earth Engine
+# Authenticate Earth Engine
 credentials = ee.ServiceAccountCredentials(
-    service_account_info["client_email"],
-    key_data=json.dumps(service_account_info)
+    email=service_account_info["client_email"],
+    key_data=service_account_info
 )
 ee.Initialize(credentials)
 
-# -------------------- Folium Map Setup --------------------
-def create_map():
-    m = folium.Map(location=[22.9734, 78.6569], zoom_start=5)  # Default: India center
-    folium.Marker([22.9734, 78.6569], tooltip="Click on map to select location").add_to(m)
-    return m
+st.title("🌍 Earth Engine Satellite Dashboard")
 
-st.markdown("### 🗺️ Select a location on the map:")
-map_data = st_folium(create_map(), height=400, width=700)
+# Select region and dates
+with st.sidebar:
+    st.header("Controls")
+    lat = st.number_input("Latitude", value=21.15)
+    lon = st.number_input("Longitude", value=72.78)
+    start_date = st.date_input("Start Date", value=ee.Date('2023-01-01').format('YYYY-MM-dd').getInfo())
+    end_date = st.date_input("End Date", value=ee.Date('2023-12-31').format('YYYY-MM-dd').getInfo())
 
-# Get clicked coordinates
-if map_data and map_data.get("last_clicked"):
-    lat = map_data["last_clicked"]["lat"]
-    lon = map_data["last_clicked"]["lng"]
+    show_ndvi = st.checkbox("Show NDVI", value=True)
 
-    st.success(f"Selected Location: {lat:.4f}, {lon:.4f}")
+# Create Earth Engine geometry
+point = ee.Geometry.Point([lon, lat])
+region = point.buffer(10000).bounds()  # 10km buffer
 
-    # -------------------- NDVI Analysis --------------------
-    point = ee.Geometry.Point([lon, lat])
+# Load Sentinel-2 imagery
+s2 = ee.ImageCollection('COPERNICUS/S2_SR') \
+    .filterDate(str(start_date), str(end_date)) \
+    .filterBounds(region) \
+    .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20)) \
+    .median()
 
-    # Sentinel-2 NDVI
-    collection = (ee.ImageCollection("COPERNICUS/S2_SR")
-                  .filterBounds(point)
-                  .filterDate("2023-01-01", "2023-12-31")
-                  .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 10)))
+# Calculate NDVI
+ndvi = s2.normalizedDifference(['B8', 'B4']).rename('NDVI')
 
-    def add_ndvi(image):
-        ndvi = image.normalizedDifference(["B8", "B4"]).rename("NDVI")
-        return image.addBands(ndvi)
+# Create map
+Map = geemap.Map(center=[lat, lon], zoom=10)
 
-    with_ndvi = collection.map(add_ndvi)
-    ndvi_stats = with_ndvi.select("NDVI").mean().reduceRegion(
-        reducer=ee.Reducer.mean(),
-        geometry=point,
-        scale=10
-    )
-
-    ndvi_value = ndvi_stats.get("NDVI").getInfo() if ndvi_stats.get("NDVI") else None
-
-    if ndvi_value is not None:
-        st.metric(label="🌿 Average NDVI at this Location", value=f"{ndvi_value:.3f}")
-    else:
-        st.warning("No NDVI data found for this point.")
+if show_ndvi:
+    ndvi_params = {'min': 0.0, 'max': 1.0, 'palette': ['white', 'green']}
+    Map.addLayer(ndvi, ndvi_params, 'NDVI')
+    st.success("NDVI layer added to the map.")
 else:
-    st.info("Click anywhere on the map above to get NDVI data.")
+    vis_params = {'bands': ['B4', 'B3', 'B2'], 'min': 0, 'max': 3000}
+    Map.addLayer(s2, vis_params, 'Sentinel-2 RGB')
+    st.success("RGB image layer added to the map.")
+
+# Display map
+Map.to_streamlit(width=1200, height=600)
+
+st.markdown("✅ Data source: Sentinel-2 Surface Reflectance")
+
