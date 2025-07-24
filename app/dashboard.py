@@ -3,7 +3,7 @@ import geemap
 import streamlit as st
 import ee
 import json
-import geemap.foliumap as geemap
+from geemap import geemap.foliumap as geemap
 
 st.set_page_config(page_title="AI Satellite Agriculture", layout="wide")
 
