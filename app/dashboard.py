@@ -1,55 +1,67 @@
 import streamlit as st
 import ee
 import geemap.foliumap as geemap
+import json
 
-# Page config
-st.set_page_config(page_title="Satellite Agriculture Dashboard", layout="wide")
+# Set page configuration
+st.set_page_config(
+    page_title="Satellite Agriculture Dashboard",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
 st.title("🌾 Satellite Agriculture Monitoring Dashboard")
 
-# 🔐 Embedded GEE Service Account Credentials (replace placeholders!)
-service_account_info = {
-  "type": "service_account",
-  "project_id": "your-project-id",
-  "private_key_id": "your-private-key-id",
-  "private_key": "-----BEGIN PRIVATE KEY-----\\nYOUR_PRIVATE_KEY\\n-----END PRIVATE KEY-----\\n",
-  "client_email": "your-service-account@your-project-id.iam.gserviceaccount.com",
-  "client_id": "your-client-id",
-  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-  "token_uri": "https://oauth2.googleapis.com/token",
-  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/your-service-account%40your-project-id.iam.gserviceaccount.com"
-}
+# Load credentials from secrets
+try:
+    service_account_info = st.secrets["GEE_SERVICE_JSON"]
+    service_account_json = json.dumps(dict(service_account_info))
+    credentials = ee.ServiceAccountCredentials(email=service_account_info["client_email"], key_data=service_account_json)
+    ee.Initialize(credentials)
+except Exception as e:
+    st.error(f"Google Earth Engine authentication failed: {e}")
+    st.stop()
 
-# ✅ Authenticate with Earth Engine
-credentials = ee.ServiceAccountCredentials(
-    email=service_account_info["client_email"],
-    key_data=service_account_info
-)
-ee.Initialize(credentials)
+# Sidebar controls
+st.sidebar.title("🧭 Map Settings")
+selected_basemap = st.sidebar.selectbox("🌍 Select Basemap", ["SATELLITE", "HYBRID", "TERRAIN", "ROADMAP"])
 
-# 🗺️ Create Earth Engine map centered on India
-Map = geemap.Map(center=[20.5937, 78.9629], zoom=5)
+st.sidebar.markdown("---")
+st.sidebar.write("Example Dataset:")
+dataset_type = st.sidebar.radio("Choose dataset", ["MODIS NDVI", "Sentinel-2 NDVI"])
 
-# 🛰️ Load Sentinel-2 image and calculate NDVI
-dataset = ee.ImageCollection("COPERNICUS/S2") \
-    .filterDate("2023-01-01", "2023-12-31") \
-    .filterBounds(ee.Geometry.Point(78.9629, 20.5937)) \
-    .sort("CLOUDY_PIXEL_PERCENTAGE") \
-    .first()
+# Create Map
+m = geemap.Map(center=[22.9734, 78.6569], zoom=5)
+m.add_basemap(selected_basemap)
 
-ndvi = dataset.normalizedDifference(['B8', 'B4']).rename('NDVI')
+# Load and visualize NDVI data
+if dataset_type == "MODIS NDVI":
+    collection = ee.ImageCollection("MODIS/006/MOD13A1").select('NDVI').filterDate('2023-01-01', '2023-12-31')
+    image = collection.mean()
+    vis_params = {
+        'min': 0.0,
+        'max': 9000.0,
+        'palette': ['white', 'green']
+    }
+    m.addLayer(image, vis_params, "MODIS NDVI (2023)")
 
-# 🖼️ NDVI visualization style
-ndvi_vis = {
-    'min': 0,
-    'max': 1,
-    'palette': ['white', 'green']
-}
+elif dataset_type == "Sentinel-2 NDVI":
+    collection = ee.ImageCollection("COPERNICUS/S2_SR") \
+        .filterDate('2023-01-01', '2023-12-31') \
+        .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 10)) \
+        .median()
 
-# 🧭 Add NDVI layer to map
-Map.addLayer(ndvi, ndvi_vis, 'NDVI (2023)')
-Map.addLayerControl()
+    ndvi = collection.normalizedDifference(['B8', 'B4'])
+    vis_params = {
+        'min': 0.0,
+        'max': 1.0,
+        'palette': ['brown', 'yellow', 'green']
+    }
+    m.addLayer(ndvi, vis_params, "Sentinel-2 NDVI (2023)")
 
-# 📍 Streamlit map display
-st.subheader("Normalized Difference Vegetation Index (NDVI) - Sentinel-2")
-Map.to_streamlit(height=600)
+# Show Map
+m.to_streamlit(height=600)
+
+# Footer
+st.markdown("---")
+st.markdown("📍 Data Source: Google Earth Engine | 🛰️ MODIS & Sentinel-2")
