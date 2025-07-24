@@ -3,37 +3,38 @@ import json
 import ee
 import geemap.foliumap as geemap
 
-st.set_page_config(layout="wide")
-st.title("🛰️ Satellite-Based Agriculture Monitoring Dashboard")
+# Load service account credentials from Streamlit secrets
+service_account_info = json.loads(st.secrets["gcp_service_account"]["json"])
 
 # Authenticate with Google Earth Engine
-try:
-    service_account_info = json.loads(st.secrets["gcp_service_account"]["json"])
-    credentials = ee.ServiceAccountCredentials(
-        email=service_account_info['client_email'],
-        key_data=service_account_info
-    )
-    ee.Initialize(credentials)
-    st.success("✅ Earth Engine initialized successfully.")
-except Exception as e:
-    st.error("❌ Failed to initialize Earth Engine.")
-    st.exception(e)
-    st.stop()
+credentials = ee.ServiceAccountCredentials(
+    email=service_account_info['client_email'],
+    key_data=service_account_info
+)
+ee.Initialize(credentials)
 
-# Create a map
-try:
-    Map = geemap.Map(center=[20.5937, 78.9629], zoom=5)
-    Map.add_basemap("SATELLITE")
+# Streamlit UI
+st.set_page_config(page_title="Satellite Agriculture Dashboard", layout="wide")
+st.title("🌾 Satellite Agriculture Monitoring Dashboard")
 
-    # Example: Load NDVI layer for agriculture monitoring
-    collection = ee.ImageCollection('MODIS/006/MOD13Q1').select('NDVI')
-    image = collection.sort('system:time_start', False).first()
-    vis_params = {'min': 0, 'max': 9000, 'palette': ['white', 'green']}
-    Map.addLayer(image, vis_params, "Latest NDVI")
+# Create Earth Engine Map
+Map = geemap.Map(center=[20.5937, 78.9629], zoom=4)
 
-    # Display the map
-    Map.to_streamlit(height=600)
+# Example: Load NDVI image from Sentinel-2
+dataset = ee.ImageCollection("COPERNICUS/S2") \
+    .filterDate("2023-01-01", "2023-12-31") \
+    .filterBounds(ee.Geometry.Point(78.9629, 20.5937)) \
+    .sort("CLOUDY_PIXEL_PERCENTAGE") \
+    .first()
 
-except Exception as e:
-    st.error("❌ Failed to load satellite imagery.")
-    st.exception(e)
+ndvi = dataset.normalizedDifference(['B8', 'B4']).rename('NDVI')
+ndvi_vis = {
+    'min': 0,
+    'max': 1,
+    'palette': ['white', 'green']
+}
+Map.addLayer(ndvi, ndvi_vis, 'NDVI 2023')
+Map.addLayerControl()
+
+st.markdown("### Example NDVI Visualization for Sentinel-2 (2023)")
+Map.to_streamlit(height=600)
