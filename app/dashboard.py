@@ -1,52 +1,39 @@
 import streamlit as st
-import ee
 import json
-import geemap
+import ee
+import geemap.foliumap as geemap
 
-st.set_page_config(page_title="AI Satellite Agriculture", layout="wide")
-
-# Title
-st.title("🌾 AI Satellite Agriculture Dashboard")
-
-# Load service account JSON from Streamlit secrets
-service_account_info = st.secrets["GEE_SERVICE_JSON"]
-key_data_json = json.dumps(service_account_info)
+st.set_page_config(layout="wide")
+st.title("🛰️ Satellite-Based Agriculture Monitoring Dashboard")
 
 # Authenticate with Google Earth Engine
-credentials = ee.ServiceAccountCredentials(
-    email=service_account_info["client_email"],
-    key_data=key_data_json
-)
-ee.Initialize(credentials)
-
-# Sidebar inputs
-st.sidebar.header("🔧 Controls")
-region = st.text_input("Enter a region name (e.g., 'India')", "India")
-start_date = st.date_input("Start Date", value=None)
-end_date = st.date_input("End Date", value=None)
-
-# Sentinel-2 NDVI
 try:
-    geometry = ee.FeatureCollection("USDOS/LSIB_SIMPLE/2017") \
-        .filter(ee.Filter.eq('country_na', region)) \
-        .geometry()
+    service_account_info = json.loads(st.secrets["gcp_service_account"]["json"])
+    credentials = ee.ServiceAccountCredentials(
+        email=service_account_info['client_email'],
+        key_data=service_account_info
+    )
+    ee.Initialize(credentials)
+    st.success("✅ Earth Engine initialized successfully.")
+except Exception as e:
+    st.error("❌ Failed to initialize Earth Engine.")
+    st.exception(e)
+    st.stop()
 
-    collection = (ee.ImageCollection("COPERNICUS/S2_SR")
-                  .filterDate(str(start_date), str(end_date))
-                  .filterBounds(geometry)
-                  .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 10))
-                  .median())
+# Create a map
+try:
+    Map = geemap.Map(center=[20.5937, 78.9629], zoom=5)
+    Map.add_basemap("SATELLITE")
 
-    ndvi = collection.normalizedDifference(['B8', 'B4']).rename('NDVI')
+    # Example: Load NDVI layer for agriculture monitoring
+    collection = ee.ImageCollection('MODIS/006/MOD13Q1').select('NDVI')
+    image = collection.sort('system:time_start', False).first()
+    vis_params = {'min': 0, 'max': 9000, 'palette': ['white', 'green']}
+    Map.addLayer(image, vis_params, "Latest NDVI")
 
-    m = geemap.Map(center=[20, 78], zoom=4)  # You can adjust the center
-    ndvi_vis = {'min': 0, 'max': 1, 'palette': ['blue', 'white', 'green']}
-    m.addLayer(ndvi, ndvi_vis, 'NDVI')
-    m.addLayer(geometry, {}, 'Region Boundary')
-    m.addLayerControl()
-
-    m.to_streamlit(height=600)
+    # Display the map
+    Map.to_streamlit(height=600)
 
 except Exception as e:
-    st.error("Failed to load data:")
-    st.code(str(e))
+    st.error("❌ Failed to load satellite imagery.")
+    st.exception(e)
