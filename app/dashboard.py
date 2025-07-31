@@ -1,7 +1,6 @@
 import streamlit as st
 import ee
 import geemap.foliumap as geemap
-import json
 
 # Set page configuration
 st.set_page_config(
@@ -12,12 +11,10 @@ st.set_page_config(
 
 st.title("🌾 Satellite Agriculture Monitoring Dashboard")
 
-# ✅ Load and parse GEE credentials from Streamlit secrets
+# ✅ Load credentials directly (DO NOT use json.loads)
 try:
-    # Load JSON string and parse it
-    service_account_info = json.loads(st.secrets["GEE_SERVICE_JSON"])
+    service_account_info = st.secrets["GEE_SERVICE_JSON"]
 
-    # Authenticate using parsed credentials
     credentials = ee.ServiceAccountCredentials(
         email=service_account_info["client_email"],
         key_data=service_account_info
