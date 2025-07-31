@@ -1,68 +1,59 @@
 import streamlit as st
 import ee
-import geemap.foliumap as geemap
 import json
+import os
+from streamlit_folium import st_folium
+import folium
 
-st.set_page_config(
-    page_title="Satellite Agriculture Dashboard",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# Load the GEE service account key from secrets
+gee_service_json = st.secrets["GEE_SERVICE_JSON"]
 
-st.title("🌾 Satellite Agriculture Monitoring Dashboard")
+# Convert JSON string to dict
+if isinstance(gee_service_json, str):
+    service_account_info = json.loads(gee_service_json)
+else:
+    service_account_info = gee_service_json  # If it's already a dict
 
 # Authenticate with Earth Engine
-try:
-    service_account_info = json.loads(st.secrets["GEE_SERVICE_JSON"])
-    credentials = ee.ServiceAccountCredentials(
-        email=service_account_info["client_email"],
-        key_data=json.dumps(service_account_info)
-    )
-    ee.Initialize(credentials)
-except Exception as e:
-    st.error(f"❌ Google Earth Engine authentication failed: {e}")
-    st.stop()
+credentials = ee.ServiceAccountCredentials(service_account_info['client_email'], key_data=service_account_info)
+ee.Initialize(credentials)
 
-# Sidebar controls
-st.sidebar.title("🧭 Map Settings")
-selected_basemap = st.sidebar.selectbox("🌍 Select Basemap", ["SATELLITE", "HYBRID", "TERRAIN", "ROADMAP"])
+# Streamlit App UI
+st.title("🌍 Google Earth Engine Map Viewer")
 
-st.sidebar.markdown("---")
-dataset_type = st.sidebar.radio("Choose dataset", ["MODIS NDVI", "Sentinel-2 NDVI"])
+st.write("This app uses a service account to authenticate with Google Earth Engine.")
 
-# Create the map
-m = geemap.Map(center=[22.9734, 78.6569], zoom=5)
-m.add_basemap(selected_basemap)
+# Example GEE dataset
+image = ee.Image('COPERNICUS/S2_SR/20210623T104031_20210623T104028_T31TFJ').select('B4')
 
-# Load and display data
-if dataset_type == "MODIS NDVI":
-    collection = ee.ImageCollection("MODIS/006/MOD13A1") \
-        .select('NDVI') \
-        .filterDate('2023-01-01', '2023-12-31')
-    image = collection.mean()
-    vis_params = {
-        'min': 0.0,
-        'max': 9000.0,
-        'palette': ['white', 'green']
-    }
-    m.addLayer(image, vis_params, "MODIS NDVI (2023)")
+# Define map center
+lat, lon = 48.858844, 2.294351  # Eiffel Tower
 
-elif dataset_type == "Sentinel-2 NDVI":
-    collection = ee.ImageCollection("COPERNICUS/S2_SR") \
-        .filterDate('2023-01-01', '2023-12-31') \
-        .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 10)) \
-        .median()
+# Create a folium map
+m = folium.Map(location=[lat, lon], zoom_start=12)
 
-    ndvi = collection.normalizedDifference(['B8', 'B4'])
-    vis_params = {
-        'min': 0.0,
-        'max': 1.0,
-        'palette': ['brown', 'yellow', 'green']
-    }
-    m.addLayer(ndvi, vis_params, "Sentinel-2 NDVI (2023)")
+# Add Earth Engine layer
+def add_ee_layer(self, ee_image_object, vis_params, name):
+    map_id_dict = ee.Image(ee_image_object).getMapId(vis_params)
+    folium.raster_layers.TileLayer(
+        tiles=map_id_dict['tile_fetcher'].url_format,
+        attr='Google Earth Engine',
+        name=name,
+        overlay=True,
+        control=True
+    ).add_to(self)
 
-m.to_streamlit(height=600)
+folium.Map.add_ee_layer = add_ee_layer
 
-# Footer
-st.markdown("---")
-st.markdown("📍 Data Source: Google Earth Engine | 🛰️ MODIS & Sentinel-2")
+# Visualization parameters
+vis_params = {
+    'min': 0,
+    'max': 3000,
+    'palette': ['blue', 'green', 'red']
+}
+
+m.add_ee_layer(image, vis_params, "Sentinel-2 Red Band")
+folium.LayerControl().add_to(m)
+
+# Display map in Streamlit
+st_folium(m, width=700, height=500)
