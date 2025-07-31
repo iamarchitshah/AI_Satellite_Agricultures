@@ -12,16 +12,17 @@ st.set_page_config(
 
 st.title("🌾 Satellite Agriculture Monitoring Dashboard")
 
-# Load credentials from Streamlit secrets
+# Authenticate with Google Earth Engine
 try:
-    # ✅ Parse JSON string correctly from secrets.toml
-    service_account_info = json.loads(st.secrets["GEE_SERVICE_JSON"])
-    
+    # Convert AttrDict -> dict -> JSON string
+    service_account_info_dict = dict(st.secrets["GEE_SERVICE_JSON"])
+    service_account_json_str = json.dumps(service_account_info_dict)
+
     credentials = ee.ServiceAccountCredentials(
-        email=service_account_info["client_email"],
-        key_data=json.dumps(service_account_info)
+        email=service_account_info_dict["client_email"],
+        key_data=service_account_json_str
     )
-    
+
     ee.Initialize(credentials)
 
 except Exception as e:
