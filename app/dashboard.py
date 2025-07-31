@@ -1,39 +1,70 @@
 import streamlit as st
 import ee
+import geemap.foliumap as geemap
 import json
 
-# Title of the app
-st.title("🌍 Google Earth Engine with Streamlit")
+# Set page configuration
+st.set_page_config(
+    page_title="Satellite Agriculture Dashboard",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# Authenticate and initialize Earth Engine
+st.title("🌾 Satellite Agriculture Monitoring Dashboard")
+
+# ✅ Fixed: Load and parse credentials from secrets
 try:
-    # Load GEE service account credentials from Streamlit secrets
     service_account_info = json.loads(st.secrets["GEE_SERVICE_JSON"])
-
-    # Authenticate using service account credentials
     credentials = ee.ServiceAccountCredentials(
         email=service_account_info["client_email"],
         key_data=service_account_info
     )
     ee.Initialize(credentials)
-    st.success("✅ Successfully authenticated with Google Earth Engine!")
-
+    st.success("✅ Google Earth Engine authentication successful!")
 except Exception as e:
     st.error(f"❌ Google Earth Engine authentication failed:\n{e}")
     st.stop()
 
-# Example: Display info about an Earth Engine dataset
-try:
-    # Load a sample EE dataset (MODIS land surface temperature)
-    dataset = ee.ImageCollection("MODIS/006/MOD11A2").select('LST_Day_1km')
+# Sidebar controls
+st.sidebar.title("🧭 Map Settings")
+selected_basemap = st.sidebar.selectbox("🌍 Select Basemap", ["SATELLITE", "HYBRID", "TERRAIN", "ROADMAP"])
 
-    # Get time range info
-    first_image = dataset.first()
-    info = first_image.getInfo()
+st.sidebar.markdown("---")
+st.sidebar.write("Example Dataset:")
+dataset_type = st.sidebar.radio("Choose dataset", ["MODIS NDVI", "Sentinel-2 NDVI"])
 
-    # Show metadata
-    st.subheader("📦 Example Dataset: MODIS Land Surface Temp")
-    st.write(info)
+# Create Map
+m = geemap.Map(center=[22.9734, 78.6569], zoom=5)
+m.add_basemap(selected_basemap)
 
-except Exception as e:
-    st.error(f"⚠️ Failed to load EE dataset:\n{e}")
+# Load and visualize NDVI data
+if dataset_type == "MODIS NDVI":
+    collection = ee.ImageCollection("MODIS/006/MOD13A1").select('NDVI').filterDate('2023-01-01', '2023-12-31')
+    image = collection.mean()
+    vis_params = {
+        'min': 0.0,
+        'max': 9000.0,
+        'palette': ['white', 'green']
+    }
+    m.addLayer(image, vis_params, "MODIS NDVI (2023)")
+
+elif dataset_type == "Sentinel-2 NDVI":
+    collection = ee.ImageCollection("COPERNICUS/S2_SR") \
+        .filterDate('2023-01-01', '2023-12-31') \
+        .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 10)) \
+        .median()
+
+    ndvi = collection.normalizedDifference(['B8', 'B4'])
+    vis_params = {
+        'min': 0.0,
+        'max': 1.0,
+        'palette': ['brown', 'yellow', 'green']
+    }
+    m.addLayer(ndvi, vis_params, "Sentinel-2 NDVI (2023)")
+
+# Show Map
+m.to_streamlit(height=600)
+
+# Footer
+st.markdown("---")
+st.markdown("📍 Data Source: Google Earth Engine | 🛰️ MODIS & Sentinel-2")
