@@ -3,16 +3,21 @@ import ee
 import geemap.foliumap as geemap
 import json
 
-# Set page config
-st.set_page_config(page_title="Satellite Agriculture Dashboard", layout="wide")
+st.set_page_config(
+    page_title="Satellite Agriculture Dashboard",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 st.title("🌾 Satellite Agriculture Monitoring Dashboard")
 
-# Authenticate with Google Earth Engine using secrets
+# Authenticate with Earth Engine
 try:
-    service_account_info = st.secrets["GEE_SERVICE_JSON"]
-    service_account_dict = json.loads(service_account_info)  # Now it's a real dict
-    credentials = ee.ServiceAccountCredentials(email=service_account_dict["client_email"], key_data=service_account_info)
+    service_account_info = json.loads(st.secrets["GEE_SERVICE_JSON"])
+    credentials = ee.ServiceAccountCredentials(
+        email=service_account_info["client_email"],
+        key_data=json.dumps(service_account_info)
+    )
     ee.Initialize(credentials)
 except Exception as e:
     st.error(f"❌ Google Earth Engine authentication failed: {e}")
@@ -21,15 +26,19 @@ except Exception as e:
 # Sidebar controls
 st.sidebar.title("🧭 Map Settings")
 selected_basemap = st.sidebar.selectbox("🌍 Select Basemap", ["SATELLITE", "HYBRID", "TERRAIN", "ROADMAP"])
-dataset_type = st.sidebar.radio("🛰️ Choose NDVI Dataset", ["MODIS NDVI", "Sentinel-2 NDVI"])
 
-# Create map
+st.sidebar.markdown("---")
+dataset_type = st.sidebar.radio("Choose dataset", ["MODIS NDVI", "Sentinel-2 NDVI"])
+
+# Create the map
 m = geemap.Map(center=[22.9734, 78.6569], zoom=5)
 m.add_basemap(selected_basemap)
 
-# NDVI visualization
+# Load and display data
 if dataset_type == "MODIS NDVI":
-    collection = ee.ImageCollection("MODIS/006/MOD13A1").select("NDVI").filterDate("2023-01-01", "2023-12-31")
+    collection = ee.ImageCollection("MODIS/006/MOD13A1") \
+        .select('NDVI') \
+        .filterDate('2023-01-01', '2023-12-31')
     image = collection.mean()
     vis_params = {
         'min': 0.0,
@@ -39,13 +48,12 @@ if dataset_type == "MODIS NDVI":
     m.addLayer(image, vis_params, "MODIS NDVI (2023)")
 
 elif dataset_type == "Sentinel-2 NDVI":
-    collection = (
-        ee.ImageCollection("COPERNICUS/S2_SR")
-        .filterDate("2023-01-01", "2023-12-31")
-        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 10))
+    collection = ee.ImageCollection("COPERNICUS/S2_SR") \
+        .filterDate('2023-01-01', '2023-12-31') \
+        .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 10)) \
         .median()
-    )
-    ndvi = collection.normalizedDifference(["B8", "B4"])
+
+    ndvi = collection.normalizedDifference(['B8', 'B4'])
     vis_params = {
         'min': 0.0,
         'max': 1.0,
@@ -53,7 +61,6 @@ elif dataset_type == "Sentinel-2 NDVI":
     }
     m.addLayer(ndvi, vis_params, "Sentinel-2 NDVI (2023)")
 
-# Display map
 m.to_streamlit(height=600)
 
 # Footer
