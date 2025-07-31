@@ -1,6 +1,7 @@
 import streamlit as st
 import ee
 import geemap.foliumap as geemap
+import json
 
 # Set page configuration
 st.set_page_config(
@@ -11,19 +12,20 @@ st.set_page_config(
 
 st.title("🌾 Satellite Agriculture Monitoring Dashboard")
 
-# ✅ Load credentials directly (DO NOT use json.loads)
+# Load credentials from Streamlit secrets
 try:
-    service_account_info = st.secrets["GEE_SERVICE_JSON"]
-
+    # ✅ Parse JSON string correctly from secrets.toml
+    service_account_info = json.loads(st.secrets["GEE_SERVICE_JSON"])
+    
     credentials = ee.ServiceAccountCredentials(
         email=service_account_info["client_email"],
-        key_data=service_account_info
+        key_data=json.dumps(service_account_info)
     )
+    
     ee.Initialize(credentials)
-    st.success("✅ Google Earth Engine authentication successful!")
 
 except Exception as e:
-    st.error(f"❌ Google Earth Engine authentication failed:\n{e}")
+    st.error(f"❌ Google Earth Engine authentication failed: {e}")
     st.stop()
 
 # Sidebar controls
@@ -55,7 +57,7 @@ elif dataset_type == "Sentinel-2 NDVI":
         .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 10)) \
         .median()
 
-    ndvi = collection.normalizedDifference(['B8', 'B4'])
+    ndvi = collection.normalizedDifference(['B8', 'B4']).rename('NDVI')
     vis_params = {
         'min': 0.0,
         'max': 1.0,
