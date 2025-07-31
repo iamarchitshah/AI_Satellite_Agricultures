@@ -12,15 +12,19 @@ st.set_page_config(
 
 st.title("🌾 Satellite Agriculture Monitoring Dashboard")
 
-# ✅ Fixed: Load and parse credentials from secrets
+# ✅ Load and parse GEE credentials from Streamlit secrets
 try:
+    # Load JSON string and parse it
     service_account_info = json.loads(st.secrets["GEE_SERVICE_JSON"])
+
+    # Authenticate using parsed credentials
     credentials = ee.ServiceAccountCredentials(
         email=service_account_info["client_email"],
         key_data=service_account_info
     )
     ee.Initialize(credentials)
     st.success("✅ Google Earth Engine authentication successful!")
+
 except Exception as e:
     st.error(f"❌ Google Earth Engine authentication failed:\n{e}")
     st.stop()
