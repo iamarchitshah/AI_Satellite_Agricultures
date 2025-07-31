@@ -1,6 +1,4 @@
 geemap
-earthengine-api
-
 streamlit>=1.30
 streamlit-folium
 folium
